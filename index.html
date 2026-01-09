@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomodoro</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --white:#fff;
+  --muted:#94a3b8;
+  --accent:#7dd3fc;
+  --disabled:#64748b;
+}
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:"Tajawal",sans-serif;
+}
+
+body{
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  color:var(--white);
+}
+
+/* Background */
+.bg-video{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  z-index:-2;
+  filter:brightness(.55) blur(.4px);
+}
+.overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(2,6,23,.6);
+  z-index:-1;
+}
+
+/* Signature */
+.credit{
+  position:fixed;
+  top:16px;
+  right:20px;
+  font-size:18px;
+  color:#fff;
+  user-select:none;
+}
+
+/* App */
+.app{
+  background:rgba(255,255,255,.05);
+  backdrop-filter:blur(16px);
+  padding:50px 60px;
+  border-radius:26px;
+  text-align:center;
+  box-shadow:0 30px 70px rgba(0,0,0,.5);
+}
+
+.mode{
+  font-size:18px;
+  color:#cbd5e1;
+  margin-bottom:12px;
+}
+
+.timer{
+  font-size:120px;
+  font-weight:700;
+  letter-spacing:6px;
+  margin-bottom:26px;
+}
+
+/* Mode Selector */
+.mode-select{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  margin-bottom:22px;
+}
+
+.mode-card{
+  padding:16px 30px;
+  border-radius:18px;
+  border:1px solid var(--accent);
+  cursor:pointer;
+  font-size:16px;
+  transition:.25s;
+}
+
+.mode-card.active{
+  background:var(--accent);
+  color:#020617;
+}
+
+.mode-card.disabled{
+  border-color:var(--disabled);
+  color:var(--disabled);
+  cursor:not-allowed;
+  opacity:.6;
+}
+
+/* Controls */
+.controls button{
+  background:none;
+  border:1px solid var(--accent);
+  color:var(--accent);
+  padding:12px 30px;
+  margin:0 6px;
+  border-radius:16px;
+  font-size:16px;
+  cursor:pointer;
+}
+.controls button:hover{
+  background:var(--accent);
+  color:#020617;
+}
+
+/* Settings */
+.settings-toggle{
+  margin-top:20px;
+  font-size:14px;
+  color:#cbd5e1;
+  cursor:pointer;
+}
+
+.settings{
+  display:none;
+  margin-top:25px;
+  border-top:1px solid rgba(255,255,255,.15);
+  padding-top:20px;
+}
+
+.settings input[type=number]{
+  width:80px;
+  padding:6px;
+  border-radius:10px;
+  border:none;
+  text-align:center;
+  margin-top:6px;
+}
+
+/* Audio */
+.audio-settings{
+  margin-top:18px;
+}
+.audio-settings input[type=range]{
+  width:140px;
+}
+.audio-settings button{
+  background:none;
+  border:1px solid #cbd5e1;
+  color:#fff;
+  padding:6px 14px;
+  border-radius:10px;
+  cursor:pointer;
+}
+
+/* Mobile */
+@media(max-width:600px){
+  .timer{font-size:85px}
+}
+</style>
+</head>
+
+<body>
+
+<video class="bg-video" autoplay muted loop playsinline>
+  <source src="snow.mp4">
+</video>
+<div class="overlay"></div>
+
+<div class="credit">صُنع بواسطة : تميم جادالله</div>
+
+<div class="app">
+
+  <div class="mode" id="modeText">دراسة</div>
+
+  <div class="mode-select">
+    <div class="mode-card active" id="studyCard">دراسة</div>
+    <div class="mode-card" id="breakCard">استراحة</div>
+  </div>
+
+  <div class="timer" id="timer">25:00</div>
+
+  <div class="controls">
+    <button id="toggleBtn">ابدأ</button>
+    <button id="resetBtn">إعادة</button>
+  </div>
+
+  <div class="settings-toggle" id="settingsToggle">⚙️ الإعدادات</div>
+
+  <div class="settings" id="settings">
+    <div>
+      <label>الدراسة (دقائق)</label><br>
+      <input type="number" id="studyInput" min="1" value="25">
+    </div><br>
+
+    <div>
+      <label>الاستراحة (دقائق)</label><br>
+      <input type="number" id="breakInput" min="1" value="5">
+    </div>
+
+    <div class="audio-settings">
+      <br>
+      <label>الصوت</label><br><br>
+      <button id="muteBtn">🔊</button>
+      <input type="range" id="volumeSlider" min="0" max="100" value="60">
+    </div>
+  </div>
+</div>
+
+<audio id="fireSound" loop src="fire.mp3"></audio>
+<audio id="bellSound" src="bell.mp3"></audio>
+
+<script>
+/* ===== STATE ===== */
+let studyTime = 25;
+let breakTime = 5;
+let studyLeft = studyTime * 60;
+let breakLeft = breakTime * 60;
+
+let isStudy = true;
+let running = false;
+let interval = null;
+
+let muted = false;
+let volume = 0.6;
+
+/* ===== ELEMENTS ===== */
+const timerEl = document.getElementById("timer");
+const toggleBtn = document.getElementById("toggleBtn");
+const resetBtn = document.getElementById("resetBtn");
+const modeText = document.getElementById("modeText");
+const studyCard = document.getElementById("studyCard");
+const breakCard = document.getElementById("breakCard");
+const settings = document.getElementById("settings");
+
+const fire = document.getElementById("fireSound");
+const bell = document.getElementById("bellSound");
+
+/* ===== DISPLAY ===== */
+function updateDisplay(){
+  let t = isStudy ? studyLeft : breakLeft;
+  if (t < 0) t = 0;
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  timerEl.textContent =
+    `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+updateDisplay();
+
+/* ===== AUDIO ===== */
+function applyVolume(){
+  fire.volume = muted ? 0 : volume;
+  bell.volume = muted ? 0 : volume;
+}
+applyVolume();
+
+/* ===== SETTINGS ===== */
+settingsToggle.onclick = ()=>{
+  settings.style.display = settings.style.display==="block"?"none":"block";
+};
+
+studyInput.oninput = e=>{
+  if(running) return;
+  studyTime = Number(e.target.value);
+  studyLeft = studyTime * 60;
+  if(isStudy) updateDisplay();
+};
+
+breakInput.oninput = e=>{
+  if(running) return;
+  breakTime = Number(e.target.value);
+  breakLeft = breakTime * 60;
+  if(!isStudy) updateDisplay();
+};
+
+volumeSlider.oninput = e=>{
+  volume = e.target.value / 100;
+  applyVolume();
+};
+
+muteBtn.onclick = ()=>{
+  muted = !muted;
+  muteBtn.textContent = muted ? "🔇" : "🔊";
+  applyVolume();
+};
+
+/* ===== MODE SWITCH ===== */
+studyCard.onclick = ()=>{
+  if(running) return;
+  isStudy = true;
+  modeText.textContent = "دراسة";
+  studyCard.classList.add("active");
+  breakCard.classList.remove("active");
+  updateDisplay();
+};
+
+breakCard.onclick = ()=>{
+  if(running) return;
+  isStudy = false;
+  modeText.textContent = "استراحة";
+  breakCard.classList.add("active");
+  studyCard.classList.remove("active");
+  updateDisplay();
+};
+
+/* ===== TIMER ===== */
+toggleBtn.onclick = ()=>{
+  if(!running){
+    running = true;
+    toggleBtn.textContent = "توقف";
+    studyCard.classList.add("disabled");
+    breakCard.classList.add("disabled");
+
+    if(isStudy && !muted){
+      fire.currentTime = 0;
+      fire.play();
+    }
+
+    interval = setInterval(()=>{
+      if(isStudy){
+        if(studyLeft > 0) studyLeft--;
+      }else{
+        if(breakLeft > 0) breakLeft--;
+      }
+
+      updateDisplay();
+
+      if((isStudy && studyLeft === 0) || (!isStudy && breakLeft === 0)){
+        clearInterval(interval);
+        running = false;
+        fire.pause();
+
+        // 🔔 BOOST الصوت (التعديل الوحيد)
+        bell.currentTime = 0;
+        bell.play();
+        setTimeout(() => bell.play(), 80);
+
+        toggleBtn.textContent = "ابدأ";
+        studyCard.classList.remove("disabled");
+        breakCard.classList.remove("disabled");
+      }
+    },1000);
+
+  }else{
+    clearInterval(interval);
+    running = false;
+    fire.pause();
+    toggleBtn.textContent = "استئناف";
+    studyCard.classList.remove("disabled");
+    breakCard.classList.remove("disabled");
+  }
+};
+
+resetBtn.onclick = ()=>{
+  clearInterval(interval);
+  running = false;
+  studyLeft = studyTime * 60;
+  breakLeft = breakTime * 60;
+  fire.pause();
+  updateDisplay();
+  toggleBtn.textContent = "ابدأ";
+  studyCard.classList.remove("disabled");
+  breakCard.classList.remove("disabled");
+};
+</script>
+
+</body>
+</html>
